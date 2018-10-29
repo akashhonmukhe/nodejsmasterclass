@@ -1,38 +1,70 @@
 var http = require('http')
 var url = require('url')
+var lib = require('./lib/data')
+var config = require('./lib/config')
+var handlers = require('./lib/handlers')
+var helpers = require('./lib/helpers')
+var StringDecoder = require('string_decoder').StringDecoder
+
 
 var httpServer = http.createServer(function(req, res){
-    res.write('Hey Buddy! Welcome to NodeJs Masterclass \n \n')
+    
     var parsedUrl = url.parse(req.url, true)
    
     var path = parsedUrl.pathname;
     var trimmedPath = path.replace(/^\/+|\/+$/g, '');
     var queryStringObj = parsedUrl.query;
+
+    //Get method of request
+    var method = req.method.toLowerCase();
+   
+    //Get headers from request
+    var headers = req.headers;
+   
+    //Get Payload if Any
+    var decoder = new StringDecoder('utf-8');
+    var buffer = '';
+
+    req.on('data', function(data){
+        
+        buffer += decoder.write(data);
+        //console.log(buffer)
+    });
+
+    req.on('end', function(){
+        buffer += decoder.end();
+        
+        var chosenHandler = typeof(router[trimmedPath]) !== 'undefined' ? router[trimmedPath]:handlers.notfound(res)
+        var reqData = {
+            "path":trimmedPath,
+            "queryStringObj":queryStringObj,
+            "method":method,
+            "headers":headers,
+            "payload":helpers.convJsonToObject(buffer) 
     
-    //checks for hello in url
-    (trimmedPath.indexOf('hello') !== -1)?router['hello'](res,queryStringObj):router['notfound'](res)
+        }
+    
+        chosenHandler(reqData, function(statusCode, payload){
+            statusCode = typeof(statusCode) === 'number' ? statusCode : 200
+            payload = typeof(payload) === 'object'? payload : {}
+    
+            var payloadString = JSON.stringify(payload)
+    
+            res.writeHead(statusCode)
+            res.end(payloadString)
+        })
+    });
+
 })
 
-httpServer.listen(3000, function(){
-    console.log('Connected to port 3000')
+
+httpServer.listen(config.port, function(){
+    console.log('Connected to port '+config.port)
 })
 
-var handler = {};
-
-handler.hello = function(res, queryStringObj){  
-    let welcomeMsg = {"message":"Welcome to NodeJs Master Class"}
-    if(typeof queryStringObj !== 'undefined'){
-        welcomeMsg = queryStringObj
-    }
-    res.end("Change or Pass query string parameters to get json obj \n\n"+JSON.stringify(welcomeMsg))
-}
-
-handler.notfound = function(res){
-    res.end('You can start with /hello and pass querystring to get json object !!')
-}
 
 var router = {
-    "hello": handler.hello,
-    "notfound":handler.notfound
+    "users": handlers.users,
+    "notfound":handlers.notfound
 }
 
